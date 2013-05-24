@@ -53,7 +53,7 @@ module LRM # Linux Router Monitor
       end
     end
     
-    def bgp
+    def bgp_peers
       {}.tap do |addrs|
         snmp do |m|
           m.tree("bgpPeerTable").each do |k, v|
@@ -61,8 +61,23 @@ module LRM # Linux Router Monitor
             addrs[peer] ||= {}
             addrs[peer][name] = v
           end
-          #m.tree("bgpRcvdPathAttrTable")
-          #m.tree("bgp4PathAttrTable")
+        end
+      end
+    end
+    
+    def bgp_paths
+      {}.tap do |addrs|
+        snmp do |m|
+          m.tree("bgp4PathAttrTable").each do |k, v|
+            boom = k.split(".")
+            name = boom[0]
+            prefix = boom[1, 4].join(".")
+            length = boom[5]
+            peer = boom[6, 4].join(".")
+            peer = "%s %s/%i" % [peer, prefix, length]
+            addrs[peer] ||= {}
+            addrs[peer][name] = v
+          end
         end
       end
     end
@@ -87,13 +102,11 @@ end
 if $0 == __FILE__
   router = LRM::Router.new('10.1.1.253', 'llamafarm')
   #router = LRM::Router.new('bigv.p12a.org.uk', 'llamafarm')
-  p router.uptime
-  router.bgp.each do |peer, data|
+  router.bgp_paths.each do |peer, data|
     puts "Peer #{peer}"
     data.each do |k, v|
       puts "  %-40s %s" % [k, v]
     end
     puts
   end
-  
 end

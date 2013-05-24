@@ -1,5 +1,6 @@
 $:.unshift "lib"
 
+require 'pp'
 require 'bundler'
 require 'snmp'
 require 'ipaddr'
@@ -99,14 +100,49 @@ module LRM # Linux Router Monitor
   
 end
 
+#Neighbor        V    AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+#10.1.1.254      4 60899     518     525        0    0    0 01:08:15        0
+#93.191.35.116   4 47264       0       0        0    0    0 never    Active
+
+format = "%-16{neighbor} %{version} %6{as} %8{msg_rcvd} %8{msg_sent} %8{table_ver} %4{in_q} %4{out_q} %-8{up_down} %-8{state}"
+
+puts format % { neighbor: "Neighbor",
+                version: "V",
+                as: "AS",
+                msg_rcvd: "MsgRcvd",
+                msg_sent: "MsgSent",
+                table_ver: "TblVer",
+                in_q: "InQ",
+                out_q: "OutQ",
+                up_down: "Up/Down",
+                state: "State" }
+
 if $0 == __FILE__
   router = LRM::Router.new('10.1.1.253', 'llamafarm')
   #router = LRM::Router.new('bigv.p12a.org.uk', 'llamafarm')
-  router.bgp_paths.each do |(prefix, peer), data|
-    puts "Prefix #{prefix} via #{peer}"
-    data.each do |k, v|
-      puts "  %-30s %s" % [k, v]
+  router.bgp_peers.each do |peer, data|
+    row = {}
+    row[:neighbor] = peer
+    row[:version] = data["bgpPeerNegotiatedVersion"]
+    row[:as] = data["bgpPeerRemoteAs"]
+    row[:msg_rcvd] = data["bgpPeerInTotalMessages"]
+    row[:msg_sent] = data["bgpPeerOutTotalMessages"]
+    row[:table_ver] = "?"
+    row[:in_q] = "?"
+    row[:out_q] = "?"
+    if data["bgpPeerFsmEstablishedTime"] == 0
+      row[:up_down] = "never"
+    else
+      row[:up_down] = Time.at(data["bgpPeerFsmEstablishedTime"]).utc.strftime("%H:%M:%S")
     end
-    puts
+    row[:state] = [nil, "Idle", "Connect", "Active", "Open Sent", "Open Confirm", "Established"][data["bgpPeerState"]]
+    puts format % row
   end
+  #router.bgp_paths.each do |(prefix, peer), data|
+  #  puts "Prefix #{prefix} via #{peer}"
+  #  data.each do |k, v|
+  #    puts "  %-30s %s" % [k, v]
+  #  end
+  #  puts
+  #end
 end

@@ -74,9 +74,9 @@ module LRM # Linux Router Monitor
             prefix = boom[1, 4].join(".")
             length = boom[5]
             peer = boom[6, 4].join(".")
-            peer = "%s %s/%i" % [peer, prefix, length]
-            addrs[peer] ||= {}
-            addrs[peer][name] = v
+            prefix = "%s/%i" % [prefix, length]
+            addrs[[prefix, peer]] ||= {}
+            addrs[[prefix, peer]][name] = v
           end
         end
       end
@@ -102,10 +102,10 @@ end
 if $0 == __FILE__
   router = LRM::Router.new('10.1.1.253', 'llamafarm')
   #router = LRM::Router.new('bigv.p12a.org.uk', 'llamafarm')
-  router.bgp_paths.each do |peer, data|
-    puts "Peer #{peer}"
+  router.bgp_paths.each do |(prefix, peer), data|
+    puts "Prefix #{prefix} via #{peer}"
     data.each do |k, v|
-      puts "  %-40s %s" % [k, v]
+      puts "  %-30s %s" % [k, v]
     end
     puts
   end

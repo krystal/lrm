@@ -1,6 +1,6 @@
 $:.unshift "lib"
 
-require 'pp'
+require 'awesome_print'
 require 'bundler'
 require 'snmp'
 require 'ipaddr'
@@ -66,21 +66,29 @@ module LRM # Linux Router Monitor
       end
     end
     
-    def bgp_paths
-      {}.tap do |addrs|
-        snmp do |m|
-          m.tree("bgp4PathAttrTable").each do |k, v|
-            boom = k.split(".")
-            name = boom[0]
-            prefix = boom[1, 4].join(".")
-            length = boom[5]
-            peer = boom[6, 4].join(".")
-            prefix = "%s/%i" % [prefix, length]
-            addrs[[prefix, peer]] ||= {}
-            addrs[[prefix, peer]][name] = v
-          end
+    def parse_as_path path
+      as = []
+      while path
+        as += path[2, path[1].ord * 2].unpack("n*")
+        path = path[(path[1].ord*2)..-1]
+      end
+      as
+    end
+    
+    def bgp_route prefix, len
+      prefix = IPAddr.new("#{prefix}/#{len}").to_s
+      routes = []
+      snmp do |m|
+        m.tree("bgp4PathAttrPeer.#{prefix}.#{len}") do |k, v|
+          k = k.split(".", 2)[1]
+          routes << {
+            origin: [:internal, :external][m.get("bgp4PathAttrOrigin.#{k}")],
+            next_hop: m.get("bgp4PathAttrNextHop.#{k}").to_s,
+            path: parse_as_path(m.get("bgp4PathAttrASPathSegment.#{k}")),
+          }
         end
       end
+      routes
     end
     
     def ip_addresses_by_interface
@@ -100,49 +108,15 @@ module LRM # Linux Router Monitor
   
 end
 
-#Neighbor        V    AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
-#10.1.1.254      4 60899     518     525        0    0    0 01:08:15        0
-#93.191.35.116   4 47264       0       0        0    0    0 never    Active
-
-format = "%-16{neighbor} %{version} %6{as} %8{msg_rcvd} %8{msg_sent} %8{table_ver} %4{in_q} %4{out_q} %-8{up_down} %-8{state}"
-
-puts format % { neighbor: "Neighbor",
-                version: "V",
-                as: "AS",
-                msg_rcvd: "MsgRcvd",
-                msg_sent: "MsgSent",
-                table_ver: "TblVer",
-                in_q: "InQ",
-                out_q: "OutQ",
-                up_down: "Up/Down",
-                state: "State" }
-
 if $0 == __FILE__
-  router = LRM::Router.new('10.1.1.253', 'llamafarm')
-  #router = LRM::Router.new('bigv.p12a.org.uk', 'llamafarm')
-  router.bgp_peers.each do |peer, data|
-    row = {}
-    row[:neighbor] = peer
-    row[:version] = data["bgpPeerNegotiatedVersion"]
-    row[:as] = data["bgpPeerRemoteAs"]
-    row[:msg_rcvd] = data["bgpPeerInTotalMessages"]
-    row[:msg_sent] = data["bgpPeerOutTotalMessages"]
-    row[:table_ver] = "?"
-    row[:in_q] = "?"
-    row[:out_q] = "?"
-    if data["bgpPeerFsmEstablishedTime"] == 0
-      row[:up_down] = "never"
-    else
-      row[:up_down] = Time.at(data["bgpPeerFsmEstablishedTime"]).utc.strftime("%H:%M:%S")
+  router = LRM::Router.new('a.routing.atech.io', 'llamafarm')
+  router = LRM::Router.new('b.routing.atech.io', 'llamafarm')
+  a = Resolv.getaddress("www.microsoft.com")
+  32.downto(1) do |i|
+    r = router.bgp_route(a, i)
+    unless r.empty?
+      ap r
+      break
     end
-    row[:state] = [nil, "Idle", "Connect", "Active", "Open Sent", "Open Confirm", "Established"][data["bgpPeerState"]]
-    puts format % row
   end
-  #router.bgp_paths.each do |(prefix, peer), data|
-  #  puts "Prefix #{prefix} via #{peer}"
-  #  data.each do |k, v|
-  #    puts "  %-30s %s" % [k, v]
-  #  end
-  #  puts
-  #end
 end

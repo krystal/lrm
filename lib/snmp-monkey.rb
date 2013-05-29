@@ -49,8 +49,11 @@ module SNMP
       hash = {}
       old_walk(args) { |vbl|
         oids = vbl.each_with_index.map { |vb, i|
-          hash[mib.name(vb.name).split("::")[1]] = vb.value.to_prim
-          vb.name.index(mib.oid(args[i]))
+          if block_given?
+            yield mib.name(vb.name).split("::")[1], vb.value.to_prim
+          else
+            hash[mib.name(vb.name).split("::")[1]] = vb.value.to_prim
+          end
         }
       }
       hash

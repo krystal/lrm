@@ -111,7 +111,7 @@ end
 if $0 == __FILE__
   router = LRM::Router.new('a.routing.atech.io', 'llamafarm')
   router = LRM::Router.new('b.routing.atech.io', 'llamafarm')
-  a = Resolv.getaddress("www.microsoft.com")
+  a = Resolv.getaddress("www.gnu.org")
   32.downto(1) do |i|
     r = router.bgp_route(a, i)
     unless r.empty?
